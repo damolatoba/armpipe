@@ -13,12 +13,12 @@ steps:
 - task: AzureResourceManagerTemplateDeployment@3
   inputs:
     deploymentScope: 'Resource Group'
-    azureResourceManagerConnection: 'AzureRmPipeline-conn'
+    azureResourceManagerConnection: 'cxpipeconnect'
     subscriptionId: '549cf74a-fcb0-49d2-8a63-968ea8b2b1f8'
     action: 'Create Or Update Resource Group'
-    resourceGroupName: 'AzureRmPipeline-rg'
-    location: 'Central US'
+    resourceGroupName: 'cxpipe'
+    location: 'West Europe'
     templateLocation: 'Linked artifact'
     csmFile: 'armpipe/template.json'
-    overrideParameters: '-projectNametemppipe -linkedTemplateUri https://github.com/damolatoba/armpipe'
+    overrideParameters: '-projectName cxproj -linkedTemplateUri https://raw.githubusercontent.com/damolatoba/armpipe/master/DEV_api_parameters.json'
     deploymentMode: 'Incremental'
