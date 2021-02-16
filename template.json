@@ -1,0 +1,167 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "name": {
+      "type": "String"
+    },
+    "environment": {
+      "type": "String",
+      "defaultValue": "NONPROD",
+      "allowedValues": [ "NONPROD", "DEV", "TEST", "PREPROD", "PROD" ],
+      "metadata": {
+        "description": "Is the environment 'Non-production' or 'Production'"
+      }
+    },
+    "spLocation": {
+      "type": "String",
+      "defaultValue": "UKS",
+      "metadata": {
+        "description": "Spire Azure Region/Location - default: UKS (UK South)"
+      }
+    },
+    "spPrefix": {
+      "type": "String",
+      "defaultValue": "SH",
+      "metadata": {
+        "description": "Spire Prefix for naming convention - SH"
+      }
+    },
+    "spProductName": {
+      "type": "String",
+      "defaultValue": "HMS",
+      "metadata": {
+        "description": "Name of application or service resources are being provisioned for"
+      }
+    },
+    "tagEnvironment": {
+      "type": "String",
+      "defaultValue": "NONPROD",
+      "allowedValues": ["NONPROD", "DEV", "TEST", "PREPROD", "PROD"],
+      "metadata": {
+              "description": "Is the environment 'Non-production' or 'Production'. Allowed Values: NONPROD, DEV, TEST, PREPROD, PROD"
+          }
+    },
+    "tagBusinessOwner": {
+      "type": "String",
+      "defaultValue": "Web-Development",
+      "metadata": {
+        "description": "Who is the business area owner"
+      }
+    },
+    "tagOperationalOwner": {
+      "type": "String",
+      "defaultValue": "Web-Development",
+      "metadata": {
+        "description": "Who is the Operational (support) owner"
+      }
+    },
+    "tagCriticality": {
+      "type": "String",
+      "defaultValue": "2",
+      "allowedValues": ["1","2","3","4","5"],
+      "metadata": {
+        "description": "Criticality of service; 1 for Critical Prod services - 5 for non critical dev services"
+      }
+    }
+  },
+  "variables": {
+    "webAppName": "[concat(parameters('spPrefix'), '-', parameters('spLocation'), '-web-', toLower(parameters('environment')), '-', toLower(parameters('spProductName')), parameters('name'))]",
+    "appInsightName": "[concat(parameters('spPrefix'), '-', parameters('spLocation'), '-web-', toLower(parameters('environment')), '-', toLower(parameters('spProductName')), parameters('name'))]",
+    "appServicePlanName": "[concat(parameters('spPrefix'),'-', parameters('spLocation'), '-web-', toLower(parameters('environment')), '-', toLower(parameters('spProductName')),  '-asp')]",
+    "subnetResourceId": "[concat(subscription().id, '/resourceGroups/', toUpper(parameters('spPrefix')),'-', toUpper(parameters('spLocation')), '-WEB-', toUpper(parameters('environment')), '-VNET01-rg/providers/Microsoft.Network/virtualNetworks/', ToUpper(parameters('spPrefix')),'-', ToUpper(parameters('spLocation')), '-WEB-', ToUpper(parameters('environment')), '-VNET01/subnets/WEB-', ToUpper(parameters('environment')), '-WebSites')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2018-11-01",
+      "name": "[variables('webAppName')]",
+      "location": "[resourceGroup().location]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "tags": {
+        "Application": "[toUpper(parameters('spProductName'))]",
+        "Business_Owner": "[parameters('tagBusinessOwner')]",
+        "Criticality": "[parameters('tagCriticality')]",
+        "Environment": "[parameters('tagEnvironment')]",
+        "Operational_Owner": "[parameters('tagOperationalOwner')]"
+      },
+      "kind": "app",
+      "properties": {
+        "enabled": true,
+        "hostNameSslStates": [
+          {
+            "name": "[concat(variables('webAppName'),'.azurewebsites.net')]",
+            "sslState": "Disabled",
+            "hostType": "Standard"
+          },
+          {
+            "name": "[concat(variables('webAppName'),'.scm.azurewebsites.net')]",
+            "sslState": "Disabled",
+            "hostType": "Repository"
+          }
+        ],
+        "serverFarmId": "[resourceId('Microsoft.Web/serverFarms', variables('appServicePlanName'))]"
+      },
+      "dependsOn": [
+        "[resourceId('microsoft.insights/components/', variables('appInsightName'))]"
+      ],
+      "resources": [
+        {
+          "apiVersion": "2018-11-01",
+          "name": "appsettings",
+          "type": "config",
+          "dependsOn": [
+            "[resourceId('Microsoft.Web/Sites', variables ('webAppName'))]",
+            "Microsoft.ApplicationInsights.AzureWebSites"
+          ],
+          "properties": {
+            "APPINSIGHTS_INSTRUMENTATIONKEY": "[reference(concat('microsoft.insights/components/', variables('appInsightName'))).InstrumentationKey]",
+            "vnetName": "1262e45d-c9a0-4b42-ab98-1d1c4b831ac6_WEB-DEV-WebSites"
+          }
+        },
+        {
+          "apiVersion": "2018-11-01",
+          "dependsOn": [
+            "[resourceId('Microsoft.Web/Sites', variables('webAppName'))]"
+          ],
+          "name": "Microsoft.ApplicationInsights.AzureWebSites",
+          "properties": {
+          },
+          "type": "siteextensions"
+        },
+        {
+          "type": "Microsoft.Web/sites/networkConfig",
+          "apiVersion": "2016-08-01",
+          "name": "[concat(variables('webAppName'), '/VirtualNetwork')]",
+          "location": "[resourceGroup().location]",
+          "dependsOn": [
+            "[resourceId('Microsoft.Web/sites', variables('webAppName'))]"
+          ],
+          "properties": {
+            "subnetResourceId": "[variables('subnetResourceId')]"
+          }
+        }
+      ]
+    },
+    {
+      "apiVersion": "2014-04-01",
+      "name": "[variables('appInsightName')]",
+      "type": "Microsoft.Insights/components",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "[concat('hidden-link:', resourceGroup().id, '/providers/Microsoft.Web/sites/', variables('webAppName'))]": "Resource",
+        "displayName": "AppInsightsComponent",
+        "Application": "[toUpper(parameters('spProductName'))]",
+        "Business_Owner": "[parameters('tagBusinessOwner')]",
+        "Criticality": "[parameters('tagCriticality')]",
+        "Environment": "[parameters('tagEnvironment')]",
+        "Operational_Owner": "[parameters('tagOperationalOwner')]"
+      },
+      "properties": {
+        "applicationId": "[variables('webAppName')]"
+      }
+    }
+  ]
+}
